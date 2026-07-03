@@ -21,12 +21,32 @@ const did = arg.startsWith('did:') ? arg : await idResolver.handle.resolve(arg).
   if (!d) throw new Error(`could not resolve handle ${arg}`)
   return d
 })
+console.log(`viewer: ${arg} -> ${did}`)
 
 const db = openDb()
 const ingestor = new Ingestor(db)
 const viewers = new ViewerStore(db, idResolver, ingestor)
 viewers.loadRelevantFromDb()
 const algo = new FeedAlgo(db, viewers)
+
+// Diagnostics before ranking, so an empty feed explains itself
+const state = await viewers.getViewer(did)
+const totalPosts = (db.prepare('SELECT count(*) AS n FROM post').get() as { n: number }).n
+const byFollows = (
+  db
+    .prepare(
+      `SELECT count(*) AS n FROM post
+       WHERE author IN (SELECT value FROM json_each(?)) AND is_reply = 0`,
+    )
+    .get(JSON.stringify(state.followsArr)) as { n: number }
+).n
+console.log(`index: ${totalPosts} posts total; viewer follows ${state.followsArr.length} accounts, ${byFollows} of their posts indexed`)
+if (state.followsArr.length < 5) {
+  console.warn(`⚠ this account follows almost nobody — did you mean to preview a different handle?`)
+}
+if (totalPosts < 50_000) {
+  console.warn(`⚠ small index — let \`npm run dev\` ingest for 15+ minutes for a meaningful preview`)
+}
 
 console.time('page 1')
 const page1 = await algo.getSkeleton(did, limit)
