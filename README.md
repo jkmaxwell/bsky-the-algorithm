@@ -1,4 +1,4 @@
-# Rewind — the timeline like it used to be
+# "The Algorithm" — the timeline like it used to be
 
 A personalized Bluesky custom feed that recreates the **mid-2010s Twitter home
 timeline**: posts from people you follow ranked by likes and friendship, a
