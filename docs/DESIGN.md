@@ -55,8 +55,14 @@ score = affinity × (1 + normalized_engagement) × boosts × ratio_guard × time
   argument bait get suppressed, not amplified.
 - time decay: half-life 6h over a 48h candidate window
 - bare replies never enter the feed; only roots and self-thread roots
-- MagicRecs lane: out-of-network post where ≥3 of the viewer's follows liked it
-  within 6h, scored by distinct-liker count, capped at 3 per ranked block
+- MagicRecs lane: out-of-network post where ≥2 of the viewer's follows liked it
+  within 6h, scored by the affinity-weighted sum of those likers (two likers
+  you love beat three you barely notice), capped at 3 per ranked block
+- Interest-author lane: out-of-network authors the viewer has liked ≥2 times
+  become ranking candidates; combined out-of-network content capped at 5/15
+- Freshness: a per-viewer `seen` table excludes previously-served block posts
+  (48h memory, 10-minute grace for stable pull-to-refresh) — the literal
+  "while you were away" semantics; plus max 2 block slots per author
 
 ## What we deliberately do NOT do
 

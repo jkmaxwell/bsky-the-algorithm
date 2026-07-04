@@ -1,6 +1,6 @@
 import type { Db } from './db.js'
 import type { ViewerStore, ViewerState } from './viewer.js'
-import { WEIGHTS, scorePost, burstScore, engagementRaw, type PostSignals } from './scoring.js'
+import { WEIGHTS, scorePost, burstScore, engagementRaw, affinity, type PostSignals } from './scoring.js'
 
 export interface ScoredCandidate {
   uri: string
@@ -8,6 +8,35 @@ export interface ScoredCandidate {
   createdAt: number
   score: number
   signals: PostSignals
+  /** false = interest-author candidate (viewer likes them but doesn't follow) */
+  inNetwork: boolean
+}
+
+/**
+ * Pick ranked-block posts from the scored list under the block's constraints:
+ * never repeat a seen post, at most maxPerAuthorInBlock per author, and at
+ * most maxOutOfNetwork interest-author posts (friends first). Pure; exported
+ * for tests.
+ */
+export function selectRankedPosts(
+  scored: ScoredCandidate[],
+  seen: Set<string>,
+  slots: number,
+  maxOutOfNetwork: number,
+): ScoredCandidate[] {
+  const perAuthor = new Map<string, number>()
+  const picked: ScoredCandidate[] = []
+  let outOfNetwork = 0
+  for (const c of scored) {
+    if (picked.length >= slots) break
+    if (seen.has(c.uri)) continue
+    if ((perAuthor.get(c.author) ?? 0) >= WEIGHTS.maxPerAuthorInBlock) continue
+    if (!c.inNetwork && outOfNetwork >= maxOutOfNetwork) continue
+    picked.push(c)
+    perAuthor.set(c.author, (perAuthor.get(c.author) ?? 0) + 1)
+    if (!c.inNetwork) outOfNetwork++
+  }
+  return picked
 }
 
 export interface SkeletonItem {
@@ -71,7 +100,12 @@ export class FeedAlgo {
     private viewers: ViewerStore,
   ) {}
 
-  async getSkeleton(viewerDid: string | null, limit: number, cursor?: string): Promise<Skeleton> {
+  async getSkeleton(
+    viewerDid: string | null,
+    limit: number,
+    cursor?: string,
+    opts: { recordSeen?: boolean } = {},
+  ): Promise<Skeleton> {
     limit = Math.max(1, Math.min(limit || 50, 100))
 
     if (!viewerDid) return this.genericFeed(limit, cursor)
@@ -85,12 +119,12 @@ export class FeedAlgo {
       return this.chronPage(viewer, limit, c)
     }
 
-    return this.firstPage(viewer, limit)
+    return this.firstPage(viewer, limit, opts.recordSeen ?? true)
   }
 
-  private firstPage(viewer: ViewerState, limit: number): Skeleton {
+  private firstPage(viewer: ViewerState, limit: number, recordSeen: boolean): Skeleton {
     const now = Date.now()
-    const ranked = this.rankedBlock(viewer, now)
+    const ranked = this.rankedBlock(viewer, now, recordSeen)
 
     const shown = new Set(ranked.map((i) => i.post))
     this.shownRanked.set(viewer.did, { uris: shown, expires: now + 3600_000 })
@@ -121,7 +155,7 @@ export class FeedAlgo {
    */
   scoreCandidates(viewer: ViewerState, now: number): ScoredCandidate[] {
     const since = now - WEIGHTS.candidateWindowHours * 3600_000
-    const followsJson = JSON.stringify(viewer.followsArr)
+    const authorsJson = JSON.stringify([...viewer.followsArr, ...viewer.interestAuthors])
 
     const candidates = this.db
       .prepare(
@@ -132,9 +166,9 @@ export class FeedAlgo {
            AND is_reply = 0
            AND created_at > ?
          ORDER BY created_at DESC
-         LIMIT 3000`,
+         LIMIT 4000`,
       )
-      .all(followsJson, since) as PostRow[]
+      .all(authorsJson, since) as PostRow[]
 
     const baselines = this.db
       .prepare(
@@ -143,7 +177,7 @@ export class FeedAlgo {
          WHERE author IN (SELECT value FROM json_each(?)) AND created_at > ?
          GROUP BY author`,
       )
-      .all(followsJson, since) as { author: string; avg_eng: number }[]
+      .all(authorsJson, since) as { author: string; avg_eng: number }[]
     const baselineMap = new Map(baselines.map((b) => [b.author, b.avg_eng]))
 
     return candidates
@@ -158,18 +192,41 @@ export class FeedAlgo {
           authorAvgEngagement: baselineMap.get(p.author) ?? 0,
           viewerLikesOfAuthor: viewer.affinity[p.author] ?? 0,
         }
-        return { uri: p.uri, author: p.author, createdAt: p.created_at, score: scorePost(signals), signals }
+        return {
+          uri: p.uri,
+          author: p.author,
+          createdAt: p.created_at,
+          score: scorePost(signals),
+          signals,
+          inNetwork: viewer.follows.has(p.author),
+        }
       })
       .sort((a, b) => b.score - a.score)
   }
 
+  private getSeen(viewerDid: string, now: number): Set<string> {
+    const rows = this.db
+      .prepare('SELECT uri FROM seen WHERE viewer = ? AND seen_at BETWEEN ? AND ?')
+      .all(viewerDid, now - WEIGHTS.seenExcludeHours * 3600_000, now - WEIGHTS.seenGraceMinutes * 60_000) as {
+      uri: string
+    }[]
+    return new Set(rows.map((r) => r.uri))
+  }
+
+  private markSeen(viewerDid: string, uris: string[], now: number): void {
+    const stmt = this.db.prepare('INSERT OR IGNORE INTO seen (viewer, uri, seen_at) VALUES (?, ?, ?)')
+    for (const uri of uris) stmt.run(viewerDid, uri, now)
+  }
+
   /** Top-of-page-1 ranked highlights: in-network scored posts + MagicRecs bursts. */
-  private rankedBlock(viewer: ViewerState, now: number): SkeletonItem[] {
+  private rankedBlock(viewer: ViewerState, now: number, recordSeen: boolean): SkeletonItem[] {
+    const seen = this.getSeen(viewer.did, now)
     const scored = this.scoreCandidates(viewer, now)
 
-    const bursts = this.magicRecs(viewer, now)
+    const bursts = this.magicRecs(viewer, now, seen)
     const inNetworkSlots = WEIGHTS.rankedBlockSize - bursts.length
-    const block: SkeletonItem[] = scored.slice(0, inNetworkSlots).map((s) => ({ post: s.uri }))
+    const picked = selectRankedPosts(scored, seen, inNetworkSlots, WEIGHTS.maxOutOfNetworkInBlock - bursts.length)
+    const block: SkeletonItem[] = picked.map((s) => ({ post: s.uri }))
 
     // Interleave discoveries into the block rather than clumping them
     const positions = [3, 8, 13]
@@ -177,7 +234,9 @@ export class FeedAlgo {
       const pos = Math.min(positions[i] ?? block.length, block.length)
       block.splice(pos, 0, { post: uri })
     })
-    return block.slice(0, WEIGHTS.rankedBlockSize)
+    const final = block.slice(0, WEIGHTS.rankedBlockSize)
+    if (recordSeen) this.markSeen(viewer.did, final.map((i) => i.post), now)
+    return final
   }
 
   /**
@@ -185,35 +244,40 @@ export class FeedAlgo {
    * follows liked within the burst window. Network coincidence, not global
    * trending.
    */
-  private magicRecs(viewer: ViewerState, now: number): string[] {
+  private magicRecs(viewer: ViewerState, now: number, seen: Set<string>): string[] {
     const since = now - WEIGHTS.burstWindowHours * 3600_000
     const rows = this.db
       .prepare(
-        `SELECT l.subject_uri AS uri, l.subject_author AS author, COUNT(DISTINCT l.liker) AS likers, MIN(l.created_at) AS first_like
+        `SELECT l.subject_uri AS uri, l.subject_author AS author,
+                GROUP_CONCAT(DISTINCT l.liker) AS likers, MIN(l.created_at) AS first_like
          FROM network_like l
          WHERE l.liker IN (SELECT value FROM json_each(?))
            AND l.created_at > ?
          GROUP BY l.subject_uri
-         HAVING likers >= ?
-         ORDER BY likers DESC
-         LIMIT 100`,
+         HAVING COUNT(DISTINCT l.liker) >= ?
+         ORDER BY COUNT(DISTINCT l.liker) DESC
+         LIMIT 200`,
       )
       .all(JSON.stringify(viewer.followsArr), since, WEIGHTS.burstMinLikers) as {
       uri: string
       author: string
-      likers: number
+      likers: string
       first_like: number
     }[]
 
     const getPost = this.db.prepare('SELECT is_reply, like_count, reply_count FROM post WHERE uri = ?')
     const picks: { uri: string; score: number }[] = []
     for (const r of rows) {
-      if (viewer.follows.has(r.author) || r.author === viewer.did) continue
+      if (viewer.follows.has(r.author) || r.author === viewer.did || seen.has(r.uri)) continue
       const post = getPost.get(r.uri) as { is_reply: number; like_count: number; reply_count: number } | undefined
       if (!post || post.is_reply === 1) continue
       // Don't "discover" a pile-on for the viewer
       if (post.reply_count >= WEIGHTS.ratioMinReplies && post.reply_count > WEIGHTS.ratioReplyToLike * post.like_count) continue
-      picks.push({ uri: r.uri, score: burstScore(r.likers, (now - r.first_like) / 3600_000) })
+      // Weight each liker by how much the viewer likes *them*
+      const weighted = r.likers
+        .split(',')
+        .reduce((sum, liker) => sum + affinity(viewer.affinity[liker] ?? 0), 0)
+      picks.push({ uri: r.uri, score: burstScore(weighted, (now - r.first_like) / 3600_000) })
     }
     return picks
       .sort((a, b) => b.score - a.score)

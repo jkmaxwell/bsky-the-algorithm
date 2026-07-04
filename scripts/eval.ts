@@ -82,10 +82,11 @@ for (const like of likes) {
     replies++
     continue
   }
-  if (viewer.follows.has(post.author)) {
-    const rank = rankByUri.get(like.subjectUri)
-    if (rank) hits.push({ uri: like.subjectUri, rank })
-    else notIndexed++ // in index but outside the 48h candidate window
+  const rank = rankByUri.get(like.subjectUri)
+  if (rank) {
+    hits.push({ uri: like.subjectUri, rank }) // follows + interest authors both count
+  } else if (viewer.follows.has(post.author)) {
+    notIndexed++ // in index but outside the 48h candidate window
   } else {
     const n = (burstCount.get(like.subjectUri, followsJson) as { n: number }).n
     outOfNetwork.push({ uri: like.subjectUri, networkLikers: n })

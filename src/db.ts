@@ -45,6 +45,16 @@ CREATE TABLE IF NOT EXISTS network_repost (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_nrepost_time ON network_repost(created_at);
 
+-- Posts already served in a viewer's ranked block ("while you were away"
+-- must never repeat). First-shown timestamp wins.
+CREATE TABLE IF NOT EXISTS seen (
+  viewer TEXT NOT NULL,
+  uri TEXT NOT NULL,
+  seen_at INTEGER NOT NULL,
+  PRIMARY KEY (viewer, uri)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_seen_time ON seen(seen_at);
+
 CREATE TABLE IF NOT EXISTS viewer (
   did TEXT PRIMARY KEY,
   follows_json TEXT,

@@ -2,6 +2,7 @@ import type { IdResolver } from '@atproto/identity'
 import type { Db } from './db.js'
 import type { Ingestor } from './ingest.js'
 import { fetchFollows, fetchViewerLikeAuthors } from './appview.js'
+import { WEIGHTS } from './scoring.js'
 
 const REFRESH_TTL_MS = 12 * 3600_000
 
@@ -11,6 +12,14 @@ export interface ViewerState {
   followsArr: string[]
   /** author DID -> count of viewer's likes of that author */
   affinity: Record<string, number>
+  /** Out-of-network authors the viewer has liked repeatedly — their taste, not their graph */
+  interestAuthors: string[]
+}
+
+function deriveInterestAuthors(did: string, follows: Set<string>, affinity: Record<string, number>): string[] {
+  return Object.entries(affinity)
+    .filter(([author, count]) => count >= WEIGHTS.interestAuthorMinLikes && !follows.has(author) && author !== did)
+    .map(([author]) => author)
 }
 
 interface ViewerRow {
@@ -78,7 +87,14 @@ export class ViewerStore {
   private rowToState(row: ViewerRow): ViewerState {
     const followsArr: string[] = row.follows_json ? JSON.parse(row.follows_json) : []
     const affinity: Record<string, number> = row.affinity_json ? JSON.parse(row.affinity_json) : {}
-    return { did: row.did, follows: new Set(followsArr), followsArr, affinity }
+    const follows = new Set(followsArr)
+    return {
+      did: row.did,
+      follows,
+      followsArr,
+      affinity,
+      interestAuthors: deriveInterestAuthors(row.did, follows, affinity),
+    }
   }
 
   private refresh(did: string): Promise<ViewerState> {
@@ -112,7 +128,14 @@ export class ViewerStore {
       .run({ did, follows: JSON.stringify(followsArr), affinity: JSON.stringify(affinity), now })
 
     this.ingestor.addRelevant([did, ...followsArr])
-    const state: ViewerState = { did, follows: new Set(followsArr), followsArr, affinity }
+    const follows = new Set(followsArr)
+    const state: ViewerState = {
+      did,
+      follows,
+      followsArr,
+      affinity,
+      interestAuthors: deriveInterestAuthors(did, follows, affinity),
+    }
     this.memory.set(did, { state, fetchedAt: now })
     console.log(`viewer: refreshed ${did} (${followsArr.length} follows, ${Object.keys(affinity).length} liked authors)`)
     return state

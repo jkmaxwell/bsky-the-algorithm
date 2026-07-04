@@ -27,8 +27,16 @@ score = affinity × (1 + engagement / author_baseline) × boosts × ratio_guard 
 - **Ratio guard**: replies ≥ 10 and > 2× likes → suppressed. Dunks don't spread here
 - **Boosts**: media ×1.15, self-thread roots ×1.25 (advice threads live!)
 - **Decay**: 6h half-life over a 48h window; bare replies never appear
-- **MagicRecs**: up to 3 out-of-network posts per block, only when ≥3 people
-  you follow liked the same post within 6h
+- **Never the same feed twice**: the ranked block remembers what it showed you
+  (48h) and only surfaces posts you haven't seen — the real "while you were
+  away" mechanic
+- **Variety**: max 2 block slots per author; out-of-network content capped at
+  5 of 15 slots (friends first)
+- **MagicRecs**: out-of-network posts injected when ≥2 people you follow liked
+  the same post within 6h, weighted by how much *you* like those likers
+- **Interest authors**: people you don't follow but have liked 2+ times
+  compete for block slots — posts from your interests, from people you
+  haven't met
 
 All knobs live in [src/scoring.ts](src/scoring.ts).
 

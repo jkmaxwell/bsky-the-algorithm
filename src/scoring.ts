@@ -33,11 +33,24 @@ export const WEIGHTS = {
   affinityLikeWeight: 0.6,
   affinityCap: 4,
 
-  burstMinLikers: 3,
+  burstMinLikers: 2,
   burstWindowHours: 6,
 
   rankedBlockSize: 15,
   maxBurstsInBlock: 3,
+  maxOutOfNetworkInBlock: 5,
+  maxPerAuthorInBlock: 2,
+
+  // Out-of-network authors the viewer has liked at least this many times
+  // become ranking candidates ("posts from your interests, people you
+  // haven't met").
+  interestAuthorMinLikes: 2,
+
+  // "While you were away": the ranked block never repeats a post the viewer
+  // was already shown, except within a short grace window so an immediate
+  // pull-to-refresh stays stable.
+  seenExcludeHours: 48,
+  seenGraceMinutes: 10,
 } as const
 
 export interface PostSignals {
@@ -84,9 +97,13 @@ export function scorePost(s: PostSignals): number {
 
 /**
  * MagicRecs-style burst score for out-of-network injections: driven purely by
- * how many of the viewer's follows converged on the post, decayed like
+ * how much of the viewer's network converged on the post, decayed like
  * everything else. Global popularity is irrelevant by construction.
+ *
+ * `weightedLikers` is the sum of affinity(viewer, liker) over distinct likers
+ * the viewer follows — two likes from accounts the viewer loves outweigh
+ * three from accounts they barely notice.
  */
-export function burstScore(distinctLikers: number, ageHours: number): number {
-  return Math.log2(1 + distinctLikers) * timeDecay(ageHours)
+export function burstScore(weightedLikers: number, ageHours: number): number {
+  return Math.log2(1 + weightedLikers) * timeDecay(ageHours)
 }

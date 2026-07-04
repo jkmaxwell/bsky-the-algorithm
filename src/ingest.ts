@@ -67,6 +67,7 @@ export class Ingestor {
   private stmtPrunePosts
   private stmtPruneLikes
   private stmtPruneReposts
+  private stmtPruneSeen
 
   constructor(private db: Db) {
     this.stmtInsertPost = db.prepare(`
@@ -93,6 +94,7 @@ export class Ingestor {
     this.stmtPrunePosts = db.prepare('DELETE FROM post WHERE created_at < ?')
     this.stmtPruneLikes = db.prepare('DELETE FROM network_like WHERE created_at < ?')
     this.stmtPruneReposts = db.prepare('DELETE FROM network_repost WHERE created_at < ?')
+    this.stmtPruneSeen = db.prepare('DELETE FROM seen WHERE seen_at < ?')
   }
 
   addRelevant(dids: Iterable<string>): void {
@@ -185,6 +187,7 @@ export class Ingestor {
     const posts = this.stmtPrunePosts.run(cutoff).changes
     const likes = this.stmtPruneLikes.run(cutoff).changes
     const reposts = this.stmtPruneReposts.run(cutoff).changes
+    this.stmtPruneSeen.run(cutoff)
     console.log(`prune: removed ${posts} posts, ${likes} likes, ${reposts} reposts older than ${config.retentionHours}h`)
   }
 }

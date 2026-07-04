@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { WEIGHTS, scorePost, affinity, ratioGuard, timeDecay, burstScore, type PostSignals } from '../src/scoring.js'
+import { selectRankedPosts, type ScoredCandidate } from '../src/feed.js'
 
 function signals(overrides: Partial<PostSignals>): PostSignals {
   return {
@@ -92,10 +93,54 @@ describe('content boosts', () => {
 })
 
 describe('burst score (MagicRecs)', () => {
-  it('scales with distinct likers, not global popularity', () => {
+  it('scales with affinity-weighted likers, not global popularity', () => {
     expect(burstScore(6, 1)).toBeGreaterThan(burstScore(3, 1))
+  })
+  it('two beloved likers outweigh three strangers', () => {
+    const twoFriends = affinity(20) + affinity(20)
+    const threeStrangers = affinity(0) * 3
+    expect(burstScore(twoFriends, 1)).toBeGreaterThan(burstScore(threeStrangers, 1))
   })
   it('decays with age', () => {
     expect(burstScore(5, 6)).toBeLessThan(burstScore(5, 1))
+  })
+})
+
+describe('ranked block selection', () => {
+  const cand = (uri: string, author: string, score: number, inNetwork = true): ScoredCandidate => ({
+    uri,
+    author,
+    createdAt: 0,
+    score,
+    signals: {} as PostSignals,
+    inNetwork,
+  })
+
+  it('never repeats a seen post ("while you were away" freshness)', () => {
+    const scored = [cand('a', 'x', 3), cand('b', 'y', 2), cand('c', 'z', 1)]
+    const picked = selectRankedPosts(scored, new Set(['a']), 10, 5)
+    expect(picked.map((p) => p.uri)).toEqual(['b', 'c'])
+  })
+
+  it('caps posts per author so one prolific friend cannot own the block', () => {
+    const scored = [cand('a1', 'x', 5), cand('a2', 'x', 4), cand('a3', 'x', 3), cand('b', 'y', 1)]
+    const picked = selectRankedPosts(scored, new Set(), 10, 5)
+    expect(picked.map((p) => p.uri)).toEqual(['a1', 'a2', 'b'])
+  })
+
+  it('caps out-of-network interest authors: friends first', () => {
+    const scored = [
+      cand('i1', 'o1', 9, false),
+      cand('i2', 'o2', 8, false),
+      cand('i3', 'o3', 7, false),
+      cand('f1', 'f', 1),
+    ]
+    const picked = selectRankedPosts(scored, new Set(), 10, 2)
+    expect(picked.map((p) => p.uri)).toEqual(['i1', 'i2', 'f1'])
+  })
+
+  it('respects the slot budget', () => {
+    const scored = Array.from({ length: 30 }, (_, i) => cand(`p${i}`, `a${i}`, 30 - i))
+    expect(selectRankedPosts(scored, new Set(), 12, 5)).toHaveLength(12)
   })
 })

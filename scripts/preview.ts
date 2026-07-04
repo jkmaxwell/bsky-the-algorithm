@@ -66,7 +66,8 @@ async function printPage(feed: { post: string; reason?: unknown }[], rankedCount
 }
 
 console.time('page 1')
-const page1 = await algo.getSkeleton(did, limit)
+// recordSeen: false — previews must not consume the viewer's "while you were away" novelty
+const page1 = await algo.getSkeleton(did, limit, undefined, { recordSeen: false })
 console.timeEnd('page 1')
 console.log(`\npage 1: ${page1.feed.length} items`)
 const { WEIGHTS } = await import('../src/scoring.js')
