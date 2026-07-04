@@ -1,4 +1,4 @@
-# Rewind — a mid-2010s Twitter-style personalized feed for Bluesky
+# The Algorithm — a mid-2010s Twitter-style personalized feed for Bluesky
 
 ## Goal
 

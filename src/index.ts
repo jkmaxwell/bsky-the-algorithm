@@ -31,7 +31,7 @@ ingestor.prune()
 
 const app = createServer(algo, idResolver)
 const server = app.listen(config.port, config.listenHost, () => {
-  console.log(`rewind: listening on ${config.listenHost}:${config.port} as ${config.serviceDid}`)
+  console.log(`the-algorithm: listening on ${config.listenHost}:${config.port} as ${config.serviceDid}`)
 })
 
 function shutdown() {

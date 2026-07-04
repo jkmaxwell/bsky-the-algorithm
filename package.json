@@ -1,5 +1,5 @@
 {
-  "name": "bsky-rewind",
+  "name": "bsky-the-algorithm",
   "version": "1.0.0",
   "description": "Mid-2010s Twitter-style personalized feed generator for Bluesky",
   "main": "index.js",

@@ -8,7 +8,7 @@ export const config = {
   hostname,
   serviceDid: process.env.FEEDGEN_SERVICE_DID ?? `did:web:${hostname}`,
   publisherDid: process.env.FEEDGEN_PUBLISHER_DID ?? '',
-  feedRkey: process.env.FEED_RKEY ?? 'rewind',
+  feedRkey: process.env.FEED_RKEY ?? 'the-algorithm',
   jetstreamUrl: process.env.JETSTREAM_URL ?? 'wss://jetstream2.us-east.bsky.network/subscribe',
   dbPath: process.env.DB_PATH ?? './data/rewind.db',
   retentionHours: Number(process.env.RETENTION_HOURS ?? 48),
