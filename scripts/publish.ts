@@ -18,11 +18,11 @@ await agent.com.atproto.repo.putRecord({
   rkey: config.feedRkey,
   record: {
     did: config.serviceDid,
-    displayName: 'Rewind',
+    displayName: 'The Algorithm',
     description:
       'The timeline like it used to be. Your follows ranked by likes and friendship, ' +
       'discoveries only when several people you follow love the same post, and zero ' +
-      'reward for arguments. Twitter circa 2016, on Bluesky.',
+      'reward for arguments. The mid-2010s Twitter algorithm, on Bluesky.',
     createdAt: new Date().toISOString(),
   },
 })
