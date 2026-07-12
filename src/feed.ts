@@ -59,6 +59,7 @@ interface PostRow {
   like_count: number
   repost_count: number
   reply_count: number
+  tone: number
 }
 
 interface ChronRow {
@@ -160,7 +161,7 @@ export class FeedAlgo {
     const candidates = this.db
       .prepare(
         `SELECT uri, author, created_at, is_reply, has_media, has_self_reply,
-                like_count, repost_count, reply_count
+                like_count, repost_count, reply_count, tone
          FROM post
          WHERE author IN (SELECT value FROM json_each(?))
            AND is_reply = 0
@@ -191,6 +192,7 @@ export class FeedAlgo {
           ageHours: (now - p.created_at) / 3600_000,
           authorAvgEngagement: baselineMap.get(p.author) ?? 0,
           viewerLikesOfAuthor: viewer.affinity[p.author] ?? 0,
+          tone: p.tone,
         }
         return {
           uri: p.uri,
@@ -265,14 +267,18 @@ export class FeedAlgo {
       first_like: number
     }[]
 
-    const getPost = this.db.prepare('SELECT is_reply, like_count, reply_count FROM post WHERE uri = ?')
+    const getPost = this.db.prepare('SELECT is_reply, like_count, reply_count, tone FROM post WHERE uri = ?')
     const picks: { uri: string; score: number }[] = []
     for (const r of rows) {
       if (viewer.follows.has(r.author) || r.author === viewer.did || seen.has(r.uri)) continue
-      const post = getPost.get(r.uri) as { is_reply: number; like_count: number; reply_count: number } | undefined
+      const post = getPost.get(r.uri) as
+        | { is_reply: number; like_count: number; reply_count: number; tone: number }
+        | undefined
       if (!post || post.is_reply === 1) continue
-      // Don't "discover" a pile-on for the viewer
+      // Don't "discover" a pile-on or a rage post for the viewer — the
+      // discovery lane is strictly for delight
       if (post.reply_count >= WEIGHTS.ratioMinReplies && post.reply_count > WEIGHTS.ratioReplyToLike * post.like_count) continue
+      if (post.tone < 0) continue
       // Weight each liker by how much the viewer likes *them*
       const weighted = r.likers
         .split(',')

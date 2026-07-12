@@ -1,5 +1,6 @@
 import type { Db } from './db.js'
 import { config } from './config.js'
+import { scoreTone } from './tone.js'
 
 export interface JetstreamCommit {
   rev: string
@@ -71,8 +72,8 @@ export class Ingestor {
 
   constructor(private db: Db) {
     this.stmtInsertPost = db.prepare(`
-      INSERT OR IGNORE INTO post (uri, cid, author, created_at, indexed_at, is_reply, parent_uri, has_media)
-      VALUES (@uri, @cid, @author, @created_at, @indexed_at, @is_reply, @parent_uri, @has_media)
+      INSERT OR IGNORE INTO post (uri, cid, author, created_at, indexed_at, is_reply, parent_uri, has_media, tone)
+      VALUES (@uri, @cid, @author, @created_at, @indexed_at, @is_reply, @parent_uri, @has_media, @tone)
     `)
     this.stmtDeletePost = db.prepare('DELETE FROM post WHERE uri = ?')
     this.stmtBumpReply = db.prepare('UPDATE post SET reply_count = reply_count + 1 WHERE uri = ?')
@@ -141,6 +142,7 @@ export class Ingestor {
       is_reply: parentUri ? 1 : 0,
       parent_uri: parentUri,
       has_media: hasMedia(record) ? 1 : 0,
+      tone: scoreTone(typeof record.text === 'string' ? record.text : ''),
     })
     if (parentUri) {
       this.stmtBumpReply.run(parentUri)

@@ -25,6 +25,11 @@ score = affinity × (1 + engagement / author_baseline) × boosts × ratio_guard 
   small account's banger beats a celebrity's shrug
 - **Affinity**: authors you like often (from your own public like history) float up
 - **Ratio guard**: replies ≥ 10 and > 2× likes → suppressed. Dunks don't spread here
+- **Tone**: a transparent word-list classifier ([src/tone.ts](src/tone.ts))
+  boosts fun posts ×1.2, dampens charged political content ×0.5, and crushes
+  outrage-affect posts ×0.2 — catching "agreement rage" (outrage that gets
+  liked, not ratio'd) that reply-based guards can't see. Discovery never
+  surfaces negative-tone posts at all
 - **Boosts**: media ×1.15, self-thread roots ×1.25 (advice threads live!)
 - **Decay**: 6h half-life over a 48h window; bare replies never appear
 - **Never the same feed twice**: the ranked block remembers what it showed you

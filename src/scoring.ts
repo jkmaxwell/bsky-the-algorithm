@@ -21,6 +21,12 @@ export const WEIGHTS = {
   mediaBoost: 1.15,
   threadRootBoost: 1.25,
 
+  // Tone multipliers (see src/tone.ts). The ratio guard catches dunks;
+  // these catch "agreement rage" — outrage that gets liked, not ratio'd.
+  toneFunBoost: 1.2,
+  tonePoliticsDamp: 0.5,
+  toneRageDamp: 0.2,
+
   ratioMinReplies: 10,
   ratioReplyToLike: 2,
   ratioPenalty: 0.15,
@@ -62,6 +68,15 @@ export interface PostSignals {
   ageHours: number
   authorAvgEngagement: number
   viewerLikesOfAuthor: number
+  /** -2 rage, -1 political/news-charged, 0 neutral, +1 fun (src/tone.ts) */
+  tone: number
+}
+
+export function toneMultiplier(tone: number): number {
+  if (tone <= -2) return WEIGHTS.toneRageDamp
+  if (tone === -1) return WEIGHTS.tonePoliticsDamp
+  if (tone >= 1) return WEIGHTS.toneFunBoost
+  return 1
 }
 
 export function engagementRaw(likes: number, reposts: number, replies: number): number {
@@ -90,6 +105,7 @@ export function scorePost(s: PostSignals): number {
   let score = affinity(s.viewerLikesOfAuthor) * (1 + normalized)
   if (s.hasMedia) score *= WEIGHTS.mediaBoost
   if (s.isThreadRoot) score *= WEIGHTS.threadRootBoost
+  score *= toneMultiplier(s.tone)
   score *= ratioGuard(s.likes, s.replies)
   score *= timeDecay(s.ageHours)
   return score

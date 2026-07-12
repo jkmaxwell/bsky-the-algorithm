@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS post (
   has_self_reply INTEGER NOT NULL DEFAULT 0,
   like_count INTEGER NOT NULL DEFAULT 0,
   repost_count INTEGER NOT NULL DEFAULT 0,
-  reply_count INTEGER NOT NULL DEFAULT 0
+  reply_count INTEGER NOT NULL DEFAULT 0,
+  tone INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_post_author_time ON post(author, created_at);
 CREATE INDEX IF NOT EXISTS idx_post_time ON post(created_at);
@@ -79,7 +80,16 @@ export function openDb(dbPath: string = config.dbPath): Db {
   db.pragma('synchronous = NORMAL')
   db.pragma('busy_timeout = 5000')
   db.exec(SCHEMA)
+  migrate(db)
   return db
+}
+
+/** Additive migrations for databases created before a column existed. */
+function migrate(db: Database.Database): void {
+  const cols = db.prepare('PRAGMA table_info(post)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'tone')) {
+    db.exec('ALTER TABLE post ADD COLUMN tone INTEGER NOT NULL DEFAULT 0')
+  }
 }
 
 export function kvGet(db: Db, key: string): string | undefined {

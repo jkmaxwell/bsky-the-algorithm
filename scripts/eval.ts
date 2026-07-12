@@ -15,7 +15,7 @@ import { Ingestor } from '../src/ingest.js'
 import { ViewerStore } from '../src/viewer.js'
 import { FeedAlgo, type ScoredCandidate } from '../src/feed.js'
 import { fetchRecentLikes, hydratePosts } from '../src/appview.js'
-import { WEIGHTS, affinity, engagementRaw, ratioGuard, timeDecay } from '../src/scoring.js'
+import { WEIGHTS, affinity, engagementRaw, ratioGuard, timeDecay, toneMultiplier } from '../src/scoring.js'
 
 const arg = process.argv[2]
 if (!arg) {
@@ -121,13 +121,16 @@ if (hits.length > 0) {
     const factors = {
       decay: timeDecay(s.ageHours),
       ratio: ratioGuard(s.likes, s.replies),
+      tone: toneMultiplier(s.tone),
       aff: affinity(s.viewerLikesOfAuthor),
       eng: 1 + engagementRaw(s.likes, s.reposts, s.replies) / (s.authorAvgEngagement + WEIGHTS.authorNormSmoothing),
     }
     const reason =
       factors.ratio < 1
         ? 'ratio-guarded (was it really a pile-on?)'
-        : factors.decay < 0.15
+        : factors.tone < 1
+          ? `tone-damped (tone ${s.tone}: politics/rage filter buried something you liked)`
+          : factors.decay < 0.15
           ? `too old by now (decay ${factors.decay.toFixed(2)})`
           : factors.aff === 1
             ? 'no affinity — you had never liked this author'
@@ -160,6 +163,8 @@ if (hits.length > 0) {
     suggestions.push(`- ${byPrefix('no affinity')} misses were authors you'd never liked before: affinity history may be too shallow (raise maxRecords in fetchViewerLikeAuthors) or affinityLikeWeight too dominant`)
   if (byPrefix('ratio-guarded') >= 2)
     suggestions.push(`- ${byPrefix('ratio-guarded')} posts you liked were ratio-guarded: check them above; if they're benign, raise ratioReplyToLike ${WEIGHTS.ratioReplyToLike} -> 3`)
+  if (byPrefix('tone-damped') >= 3)
+    suggestions.push(`- ${byPrefix('tone-damped')} posts you liked were tone-damped: the viewer likes some charged content; consider softening tonePoliticsDamp ${WEIGHTS.tonePoliticsDamp} -> 0.7 (keep toneRageDamp)`)
   if (byPrefix('low engagement') >= 3)
     suggestions.push(`- ${byPrefix('low engagement')} misses had few likes yet: the serve-time-vs-eval-time caveat may apply, or lower authorNormSmoothing`)
   const nearBursts = outOfNetwork.filter((o) => o.networkLikers > 0 && o.networkLikers < WEIGHTS.burstMinLikers).length

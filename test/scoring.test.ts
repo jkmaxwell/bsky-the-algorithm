@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { WEIGHTS, scorePost, affinity, ratioGuard, timeDecay, burstScore, type PostSignals } from '../src/scoring.js'
+import { WEIGHTS, scorePost, affinity, ratioGuard, timeDecay, burstScore, toneMultiplier, type PostSignals } from '../src/scoring.js'
 import { selectRankedPosts, type ScoredCandidate } from '../src/feed.js'
+import { scoreTone } from '../src/tone.js'
 
 function signals(overrides: Partial<PostSignals>): PostSignals {
   return {
@@ -12,6 +13,7 @@ function signals(overrides: Partial<PostSignals>): PostSignals {
     ageHours: 1,
     authorAvgEngagement: 50,
     viewerLikesOfAuthor: 0,
+    tone: 0,
     ...overrides,
   }
 }
@@ -89,6 +91,46 @@ describe('content boosts', () => {
     const thread = scorePost(signals({ likes: 20, isThreadRoot: true }))
     expect(withMedia).toBeCloseTo(plain * WEIGHTS.mediaBoost)
     expect(thread).toBeCloseTo(plain * WEIGHTS.threadRootBoost)
+  })
+})
+
+describe('tone (anti-rage, pro-fun)', () => {
+  it('classifies rage affect as -2', () => {
+    expect(scoreTone('This is DISGUSTING. Shame on every corrupt traitor who voted for it 🚨')).toBe(-2)
+  })
+  it('classifies charged political news as -1', () => {
+    expect(scoreTone('The senate passed the bill 51-49, sending it to the president')).toBe(-1)
+  })
+  it('classifies silly as +1', () => {
+    expect(scoreTone('the kelce bros tearfully disassembling their bunk bed 😭')).toBe(1)
+  })
+  it('leaves ordinary posts neutral', () => {
+    expect(scoreTone('Just planted the tomatoes. Hoping for a good summer.')).toBe(0)
+  })
+  it('classifies casual contempt/dunk language as -1', () => {
+    expect(scoreTone('the dumbest man on earth is arguing with historians again')).toBe(-1)
+  })
+  it('does not mistake ALL-CAPS excitement for rage', () => {
+    expect(scoreTone('HOLY SHIT I DID NOT KNOW HOW BIG HORSESHOE CRABS WERE')).toBe(0)
+  })
+  it('matches whole words only, not substrings', () => {
+    expect(scoreTone('the storm damage to the gopher tunnels was posted yesterday')).toBe(0)
+  })
+  it('recognizes stretched laughter', () => {
+    expect(scoreTone('ahahahahahahahahaha')).toBe(1)
+    expect(scoreTone('lmaooo')).toBe(1)
+    expect(scoreTone('loooool')).toBe(1)
+  })
+  it('agreement-rage with huge likes loses to a modest fun post', () => {
+    // The exact failure mode: 7000 people angrily liking an outrage post.
+    // Reply-count guards can't catch it; tone can.
+    const outrage = scorePost(signals({ likes: 7000, tone: -2, authorAvgEngagement: 5000 }))
+    const fun = scorePost(signals({ likes: 40, tone: 1 }))
+    expect(fun).toBeGreaterThan(outrage)
+  })
+  it('political content is dampened, not buried', () => {
+    expect(toneMultiplier(-1)).toBeGreaterThan(toneMultiplier(-2))
+    expect(toneMultiplier(-1)).toBeLessThan(1)
   })
 })
 

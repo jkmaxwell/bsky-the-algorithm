@@ -53,6 +53,12 @@ score = affinity × (1 + normalized_engagement) × boosts × ratio_guard × time
   threads)
 - **ratio guard**: replies ≥ 10 and replies > 2×likes → ×0.15. Dunked-on posts and
   argument bait get suppressed, not amplified.
+- **tone multiplier** (src/tone.ts): lexicon-scored at ingest; fun ×1.2,
+  political/news-charged ×0.5, rage-affect ×0.2. Catches "agreement rage" —
+  outrage posts that get liked rather than ratio'd — which no reply-based
+  guard can see. Word-boundary matching; ALL-CAPS only amplifies rage terms
+  (caps alone is how people shout about horseshoe crabs). Discovery lanes
+  exclude negative tone entirely.
 - time decay: half-life 6h over a 48h candidate window
 - bare replies never enter the feed; only roots and self-thread roots
 - MagicRecs lane: out-of-network post where ≥2 of the viewer's follows liked it
