@@ -26,6 +26,19 @@ Future work (not yet built): declare `acceptsInteractions` and log
 `app.bsky.feed.sendInteractions` events (impressions, show-less) to give evals
 a negative signal.
 
+## 2026-07-13 — incident: ReDoS in laughter regex froze the service
+
+- LAUGHTER_RE contained `l(?:o+){2,}l` — variable-length group under a
+  repetition. A firehose post with a stretched word ("loooo...ong") sent the
+  regex into exponential backtracking; scoreTone runs on every post in the
+  same event loop as HTTP, so the whole service wedged (systemd "active",
+  HTTP timing out). Boot prune of 1.23M aged posts confirms ~a day wedged.
+- Fixed with fixed-length atoms only; 500-char regression test added.
+- LESSON for future lexicon edits: every regex in the ingest path must be
+  linear-time — no variable-length groups under quantifiers. Also: /health
+  should be monitored externally; systemd "active" says nothing about the
+  event loop.
+
 ## 2026-07-05 — tone system added ("still a little ragey")
 
 - Justin reported the feed still felt ragey. Diagnosis: ratio guard catches
