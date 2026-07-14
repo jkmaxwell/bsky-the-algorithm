@@ -32,14 +32,30 @@ const POLITICS = [
   'administration', 'far-right', 'far right', 'leftist', 'liberals',
 ]
 
+// Slang decays — refresh this list periodically (scripts/mine-fun.ts mines
+// the network's actual vocabulary; the weekly tuner watches for staleness).
+// Mix of evergreen delight signals, current slang, and terms observed in
+// this network's own voice (Bluesky skews tumblr-inflected: little guys,
+// creatures, beloveds — not TikTok-speak).
 const FUN_WORDS = [
-  'lol', 'lmao', 'lmfao', 'haha', 'hahaha', 'hehe', 'rofl', 'funny',
-  'hilarious', 'silly', 'joke', 'cute', 'adorable', 'delightful', 'wholesome',
-  'love this', 'obsessed', 'banger', 'iconic', 'incredible', 'chef’s kiss',
-  "chef's kiss", 'goofy', 'unhinged', 'screaming', 'crying', 'dead 💀',
+  // evergreen
+  'lol', 'lmao', 'lmfao', 'funny', 'hilarious', 'silly', 'joke', 'cute',
+  'adorable', 'delightful', 'love this', 'obsessed', 'banger', 'iconic',
+  'goofy', 'unhinged', 'hell yeah', 'incredible',
+  // laughter idioms
+  'screaming', 'crying', 'wheezing', 'sobbing', 'losing it', 'took me out',
+  'sent me', "i'm dying", 'im dying',
+  // current-ish
+  'no notes', 'goated', 'so real', 'diabolical', 'menace', 'feral',
+  'chaotic', 'gremlin', 'committed to the bit', 'the bit', 'ate that',
+  'let him cook', 'let them cook', 'aura farming', 'brainrot', 'delulu',
+  'crashing out', 'crash out', 'is peak', 'shitpost',
+  // this network's voice
+  'little guy', 'little guys', 'lil guy', 'creature', 'critter', 'critters',
+  'beloved', 'eepy',
 ]
 
-const FUN_EMOJI = ['😂', '🤣', '😭', '💀', '✨', '🎉', '🥰', '😍', '🥹', '🐱', '🐶', '🦆', '🧡', '💖']
+const FUN_EMOJI = ['😂', '🤣', '😭', '💀', '✨', '🎉', '🥰', '😍', '🥹', '🫠', '🫶', '😹', '🐱', '🐶', '🦆', '🧡', '💖']
 
 // Everyday contempt/dunk language: not full outrage, but not fun either.
 // One point each vs two for RAGE terms.
@@ -67,8 +83,13 @@ const CONTEMPT_RE = compile(CONTEMPT)
 const POLITICS_RE = compile(POLITICS)
 const FUN_RE = compile(FUN_WORDS)
 
-// Laughter comes in shapes word boundaries can't see: ahahahaha, loool, lmaooo
-const LAUGHTER_RE = /(?:ha){3,}|l(?:o+){2,}l|lma+o+/i
+// Laughter comes in shapes word boundaries can't see: ahahahaha, loool,
+// lolol, lmaooo. IMPORTANT: only fixed-length atoms may sit under a
+// repetition here — a variable-length group like (?:o+){2,} backtracks
+// exponentially on strings like "loooo...ong" and froze the event loop in
+// production (2026-07-13). scoreTone runs on every post on the firehose;
+// its regexes must be linear-time.
+const LAUGHTER_RE = /(?:ha){3,}|lo{2,}l|(?:lo){2,}l|lma+o+/i
 
 function countMatches(text: string, re: RegExp): number {
   return text.match(re)?.length ?? 0

@@ -120,6 +120,13 @@ describe('tone (anti-rage, pro-fun)', () => {
     expect(scoreTone('ahahahahahahahahaha')).toBe(1)
     expect(scoreTone('lmaooo')).toBe(1)
     expect(scoreTone('loooool')).toBe(1)
+    expect(scoreTone('lololol')).toBe(1)
+  })
+  it('stays linear on pathological stretched words (ReDoS regression)', () => {
+    // "l" + many o's with no closing "l" froze production on 2026-07-13
+    const start = Date.now()
+    expect(scoreTone('this is taking soooo l' + 'o'.repeat(500) + 'ng today')).toBe(0)
+    expect(Date.now() - start).toBeLessThan(100)
   })
   it('agreement-rage with huge likes loses to a modest fun post', () => {
     // The exact failure mode: 7000 people angrily liking an outrage post.
