@@ -26,6 +26,54 @@ Future work (not yet built): declare `acceptsInteractions` and log
 `app.bsky.feed.sendInteractions` events (impressions, show-less) to give evals
 a negative signal.
 
+## 2026-09-22 — no ground truth: viewer inactive since 2026-07-31
+
+**Eval: not runnable.** Both windows returned zero likes.
+
+- `npm run eval 303.bsky.social 24` → "you liked 0 posts in the window"
+- `npm run eval 303.bsky.social 72` → "you liked 0 posts in the window"
+
+No recall@15, median rank, AUC, miss diagnoses, or discovery reachability line
+this week — the ranker was never exercised against ground truth.
+
+**Cause is upstream of the ranker, and it is not a bug.** Verified read-only
+against the public API and Justin's PDS (`morel.us-east.host.bsky.network`):
+
+- Newest `app.bsky.feed.like` record: **2026-07-31T02:29:38Z** (~7.5 weeks ago).
+- Newest post: 2026-07-30. Newest repost: 2026-07-28.
+- `listRecords` paging order confirmed newest-first (default) — `fetchRecentLikes`
+  is reading correctly, there is simply nothing in the window.
+- Justin's DID (`did:plc:5cn7tila5pqvqk7jbkgfz6hd`) appears **0 times** in 30
+  days of `journalctl -u rewind` — he has not requested the feed either.
+
+He stopped using Bluesky around 2026-07-30. Everything downstream of that is
+working.
+
+**Service health: good.**
+
+- `systemctl is-active rewind` → active; up continuously since 2026-09-10 06:47 UTC.
+- 1 error-ish line in 7 days: a single transient `jetstream: error Unexpected
+  server response: 503` on 2026-09-17, self-recovered without a restart.
+- Ingest live: hourly prunes removing 110k–165k aged posts, index 3.3 GB.
+- 16 distinct viewers refreshed in the last 7 days — the feed is serving other
+  people normally. The silence is Justin-specific, not service-wide.
+
+**Changed: nothing.** No weight change is defensible with zero ground truth.
+Forcing one would be tuning on noise.
+
+**WATCH (next week):**
+
+1. If likes are still absent, the eval-driven tuning loop is idle by definition.
+   Do not let successive empty weeks accumulate into a false "steady state" —
+   there is no evidence either way while the window is empty.
+2. Standing suggestions from earlier weeks remain unconfirmed and stay parked:
+   `tonePoliticsDamp` 0.5→0.7 (needs ≥3 tone-damped misses in a week) and the
+   affinity stray-like recency weighting. Neither has a second week of evidence.
+3. Note for whoever resumes: the 48h prune window means the index holds no
+   history from the inactive period. The first week Justin comes back, recall
+   numbers will be unusually rough for posts near the window edge — judge the
+   trend over two weeks, not the first report.
+
 ## 2026-07-13 — incident: ReDoS in laughter regex froze the service
 
 - LAUGHTER_RE contained `l(?:o+){2,}l` — variable-length group under a
